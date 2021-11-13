@@ -12,10 +12,11 @@ import time
 
 #Extras for Trajectory and Control
 from quadrotor import *
-from geom_utils import QuadPose
+from geom_utils import QuadPose, dist3dp
 from traj_planner import Traj_Planner
 from traj_planner_min_jerk import Traj
-
+# changed 
+from pose_sampler import * 
 
 
 
@@ -67,13 +68,20 @@ class PoseSampler:
             
         quat_drone = R.from_euler('ZYX',[0.,0.,0.],degrees=True).as_quat()
         self.drone_init = Pose(Vector3r(-5.,10.,-2), Quaternionr(quat_drone[0],quat_drone[1],quat_drone[2],quat_drone[3]))
-        
+        self.saveCnt = 0 
+        self.loopCnt = 0 
+        self.distanceToGate = 1 
+        self.saveChanged = True 
 
         self.track = self.track # for circle trajectory change this with circle_track
         self.drone_init = self.drone_init # for circle trajectory change this with drone_init_circle
         self.state=np.array([self.drone_init.position.x_val,self.drone_init.position.y_val,self.drone_init.position.z_val,0,0,self.yaw_track[0]-np.pi/2,0,0,0,0,0,0])
         #-----------------------------------------------------------------------             
-
+        self.transformation = self.transformation = transforms.Compose([
+                              transforms.Resize([200, 200]),
+                              #transforms.Lambda(self.gaussian_blur),
+                              #transforms.ColorJitter(brightness=self.brightness, contrast=self.contrast, saturation=self.saturation),
+                              transforms.ToTensor()])
 
     def find_gate_distances(self):
         gate_1 = self.track[0]
@@ -322,11 +330,14 @@ class PoseSampler:
                 self.traj.find_traj(x_initial=x_initial,x_final=x_final,v_initial=vel_initial,v_final=vel_final,T=T)
                 #self.traj.find_traj(x_initial=x_initial,x_final=x_final,v_initial=vel_initial,v_final=vel_final,a_initial=a_initial,a_final=a_final,T=T)
 
-
+                # Creating the path if not exist 
+                if not os.path.isdir('images/images-0'):
+                    os.mkdir(os.getcwd() + '/images/' + 'images-{}'.format(self.loopCnt))
+                
                 t_current=0.0
                 for k in range(len(t)):
                     t_current=t[k] 
-                
+                    self.getInstantaneousImg(save=True) # getting img dataset
                     target=self.traj.get_target(t_current)
                     vel_target=self.traj.get_vel(t_current)
                     quad_pose = [target[0], target[1], target[2], 0, 0, target[3]]
@@ -334,11 +345,20 @@ class PoseSampler:
                     self.total_cost+=abs(np.sqrt(pow(quad_pose[0],2)+pow(quad_pose[1],2))-10)
                     self.state=np.array([target[0],target[1],target[2],0,0,target[3],vel_target[0],vel_target[1],vel_target[2],0,0,vel_target[3]])
                     self.client.simSetVehiclePose(QuadPose(quad_pose), True)
-                    time.sleep(.01)
+                    # time.sleep(.01)
+                    # print("own    position: ", quad_pose[:3])
+                    # print("target position: ", waypoint_world)
+                    self.distanceToGate = round(dist3dp(quad_pose, waypoint_world), 2) 
+                    print("distance: ", self.distanceToGate)
+                    if self.distanceToGate < 1.0 and self.saveChanged:
+                        self.loopCnt += 1 
+                        self.saveChanged = False 
+                        print("PATHFOLDER CHANGED")
+                        if not os.path.isdir('images/images-{}'.format(self.loopCnt)):
+                            os.mkdir(os.getcwd() + '/images/' + 'images-{}'.format(self.loopCnt))
 
                 index += 1
-
-
+                self.saveChanged = True 
 
 
     def update(self, mode):
@@ -389,4 +409,20 @@ class PoseSampler:
     def writePosToFile(self, r, theta, psi, phi_rel):
         data_string = '{0} {1} {2} {3}\n'.format(r, theta, psi, phi_rel)
         self.file.write(data_string)
+
+    def getInstantaneousImg(self, save=False):
+        self.client.simSetVehiclePose(QuadPose(self.state[[0,1,2,3,4,5]]), True)
+        image_response = self.client.simGetImages([airsim.ImageRequest('0', airsim.ImageType.Scene, False, False)])[0]
+        #if len(image_response.image_data_uint8) == image_response.width * image_response.height * 3:
+        img1d = np.fromstring(image_response.image_data_uint8, dtype=np.uint8)  # get numpy array
+        img_rgb = img1d.reshape(image_response.height, image_response.width, 3)  # reshape array to 4 channel image array H X W X 3
+        # img_rgb = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2RGB)
+        # anyGate = self.isThereAnyGate(img_rgb)
+        cwd = os.getcwd()
+        if save:
+            cv2.imwrite(os.path.join(cwd + '/images/images-{}'.format(self.loopCnt) + "/frame000" + str(self.saveCnt)) + 'dist->' + str(self.distanceToGate) + '.png', img_rgb)
+            print(os.path.join(cwd + '/images/images-{}'.format(self.loopCnt) + "/frame000" + str(self.saveCnt)) + 'dist->' + str(self.distanceToGate) + '.png')
+            self.saveCnt += 1 
+        # img =  Image.fromarray(img_rgb)
+        # image = self.transformation(img) 
 

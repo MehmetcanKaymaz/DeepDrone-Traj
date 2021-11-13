@@ -347,7 +347,7 @@ class PoseSampler:
 
                 pose_gate_body = pose_gate_body.numpy().reshape(-1,1)
 
-                drone_pos=self.state[[0,1,2,3,4,5]]
+                drone_pos=self.state[[0,1,2,3,4,5]]#(x,y,z,roo,pitch,yaw)
                 waypoint_world = spherical_to_cartesian(drone_pos, pose_gate_body)
 
                 yaw_diff = pose_gate_body[3][0]

@@ -161,3 +161,10 @@ def getGatePoseWorld(p_o_b, r, theta, psi, phi_rel):
     q = rot_gate.as_quat()
     p_o_g = Pose(t_o_g, Quaternionr(q[0], q[1], q[2], q[3]))
     return p_o_g
+
+def dist3dp(p1, p2):
+    xDiff = np.power(p1[0] - p2[0], 2) 
+    yDiff = np.power(p1[1] - p2[1], 2) 
+    zDiff = np.power(p1[2] - p2[2], 2) 
+    return np.sqrt(xDiff + yDiff + zDiff)
+

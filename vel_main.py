@@ -1,4 +1,4 @@
-from pose_sampler_gt import *
+from test_PID_vel_controller import PoseSampler
 import time
 import argparse
 parser = argparse.ArgumentParser(description='CHP')
