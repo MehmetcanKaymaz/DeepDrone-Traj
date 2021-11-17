@@ -7,7 +7,7 @@ import math
 from scipy.spatial.transform import Rotation as R
 
 def cartesian_to_spherical(state, waypoint_world):
-    x_gate, y_gate, z_gate, yaw_gate = waypoint_world
+    x_gate, y_gate, z_gate = waypoint_world
     x_diff = -state[0] + x_gate
     y_diff = -state[1] + y_gate
     z_diff = -state[2] + z_gate

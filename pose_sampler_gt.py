@@ -293,7 +293,7 @@ class PoseSampler:
 
         index = 0
         while(True):
-            if index==12*10:
+            if index==12*2:
                 break
 
 
@@ -301,7 +301,6 @@ class PoseSampler:
 
                 # Trajectory generate
                 waypoint_world = np.array([self.track[index%12].position.x_val, self.track[index%12].position.y_val, self.track[index%12].position.z_val])
-                
                 posf=waypoint_world
                 yawf=self.yaw_track[index%12]-np.pi/2-(int(index/12))*2*np.pi
 
@@ -318,7 +317,6 @@ class PoseSampler:
                 vel_final=velf
                 a_initial=[0,0,0,0]
                 a_final=[0,0,0,0]
-
                 pose_err=0
                 for j in range(3):
                     pose_err+=pow(x_final[j]-pos0[j],2)
@@ -333,15 +331,20 @@ class PoseSampler:
                 # Creating the path if not exist 
                 if not os.path.isdir('images/images-0'):
                     os.mkdir(os.getcwd() + '/images/' + 'images-{}'.format(self.loopCnt))
-                
+                    gTruths = []
+
                 t_current=0.0
                 for k in range(len(t)):
                     t_current=t[k] 
-                    self.getInstantaneousImg(save=True) # getting img dataset
+                    sName = self.getInstantaneousImg(save=True) # getting img dataset
                     target=self.traj.get_target(t_current)
                     vel_target=self.traj.get_vel(t_current)
                     quad_pose = [target[0], target[1], target[2], 0, 0, target[3]]
                     vel_target=[vel_target[0], vel_target[1], vel_target[2], 0, 0, vel_target[3]]
+                    rho, phi, theta = cartesian_to_spherical(self.state, waypoint_world)
+                    yawDif = yawf - self.state[5]
+                    print("wp: ", cartesian_to_spherical(self.state,  waypoint_world), 'yaw: ', yawf - self.state[5])
+                    gTruths.append([sName, str(rho), str(phi), str(theta), str(yawDif)])
                     self.total_cost+=abs(np.sqrt(pow(quad_pose[0],2)+pow(quad_pose[1],2))-10)
                     self.state=np.array([target[0],target[1],target[2],0,0,target[3],vel_target[0],vel_target[1],vel_target[2],0,0,vel_target[3]])
                     self.client.simSetVehiclePose(QuadPose(quad_pose), True)
@@ -349,11 +352,13 @@ class PoseSampler:
                     # print("own    position: ", quad_pose[:3])
                     # print("target position: ", waypoint_world)
                     self.distanceToGate = round(dist3dp(quad_pose, waypoint_world), 2) 
-                    print("distance: ", self.distanceToGate)
+                    # print("distance: ", self.distanceToGate)
                     if self.distanceToGate < 1.0 and self.saveChanged:
+                        self.writeGroundTruthVals(gTruths)
+                        gTruths = []
                         self.loopCnt += 1 
                         self.saveChanged = False 
-                        print("PATHFOLDER CHANGED")
+                        # print("PATHFOLDER CHANGED")
                         if not os.path.isdir('images/images-{}'.format(self.loopCnt)):
                             os.mkdir(os.getcwd() + '/images/' + 'images-{}'.format(self.loopCnt))
 
@@ -420,9 +425,20 @@ class PoseSampler:
         # anyGate = self.isThereAnyGate(img_rgb)
         cwd = os.getcwd()
         if save:
-            cv2.imwrite(os.path.join(cwd + '/images/images-{}'.format(self.loopCnt) + "/frame000" + str(self.saveCnt)) + 'dist->' + str(self.distanceToGate) + '.png', img_rgb)
-            print(os.path.join(cwd + '/images/images-{}'.format(self.loopCnt) + "/frame000" + str(self.saveCnt)) + 'dist->' + str(self.distanceToGate) + '.png')
+            saveName = cwd + '/images/images-{}'.format(self.loopCnt) + "/frame000" + str(self.saveCnt) + '.png'
+            cv2.imwrite(os.path.join(saveName) ,img_rgb)
+            # print(os.path.join(cwd + '/images/images-{}'.format(self.loopCnt) + "/frame000" + str(self.saveCnt)) + 'dist->' + str(self.distanceToGate) + '.png')
             self.saveCnt += 1 
         # img =  Image.fromarray(img_rgb)
         # image = self.transformation(img) 
+        # return saveName 
+        return "/frame000" + str(self.saveCnt) + '.png' 
 
+    def writeGroundTruthVals(self, gTruths):
+        cwd = os.getcwd()
+        if not os.path.isfile(cwd + '/images/images-{}/groundTruths-{}.txt'.format(self.loopCnt, self.loopCnt)):
+            open(cwd + '/images/images-{}/groundTruths-{}.txt'.format(self.loopCnt, self.loopCnt), 'w')
+        txtName = cwd + '/images/images-{}/groundTruths-{}.txt'.format(self.loopCnt, self.loopCnt)
+        with open(txtName, "w") as writtenTxt:
+            for line in gTruths:
+                writtenTxt.write(" ".join(line) + "\n")

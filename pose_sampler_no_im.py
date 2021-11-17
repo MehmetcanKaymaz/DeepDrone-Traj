@@ -1,7 +1,9 @@
-import airsimdroneracingvae as airsimvae
-import airsim
-
 import numpy as np
+import os
+import sys
+from os.path import isfile, join
+
+import airsimdroneracingvae as airsim
 # print(os.path.abspath(airsim.__file__))
 from airsimdroneracingvae.types import Pose, Vector3r, Quaternionr
 from scipy.spatial.transform import Rotation
@@ -10,10 +12,11 @@ import time
 
 #Extras for Trajectory and Control
 from quadrotor import *
-from geom_utils import QuadPose
+from geom_utils import QuadPose, dist3dp
 from traj_planner import Traj_Planner
 from traj_planner_min_jerk import Traj
-
+# changed 
+from pose_sampler import * 
 
 
 
@@ -23,7 +26,7 @@ class PoseSampler:
         self.curr_idx = 0
         self.current_gate = 0
         self.with_gate = with_gate
-        self.client = airsimvae.MultirotorClient()
+        self.client = airsim.MultirotorClient()
         self.client.confirmConnection()
         self.client.simLoadLevel('Soccer_Field_Easy')
         time.sleep(1)        
@@ -31,14 +34,6 @@ class PoseSampler:
         self.configureEnvironment()
         self.total_cost=0
         self.dtau=1e-2
-
-        #self.client_control = airsim.MultirotorClient()
-        #self.client_control.confirmConnection()
-        #self.client_control.enableApiControl(True)
-        #self.client_control.armDisarm(True)
-        #self.client_control.moveToPositionAsync(-10, 10, -10, 5).join()
-        self.client.enableApiControl(True)
-        self.client.armDisarm(True)
 
         self.v_avg=v_avg
         self.traj=Traj_Planner()
@@ -73,19 +68,16 @@ class PoseSampler:
             
         quat_drone = R.from_euler('ZYX',[0.,0.,0.],degrees=True).as_quat()
         self.drone_init = Pose(Vector3r(-5.,10.,-2), Quaternionr(quat_drone[0],quat_drone[1],quat_drone[2],quat_drone[3]))
-        
 
         self.track = self.track # for circle trajectory change this with circle_track
         self.drone_init = self.drone_init # for circle trajectory change this with drone_init_circle
         self.state=np.array([self.drone_init.position.x_val,self.drone_init.position.y_val,self.drone_init.position.z_val,0,0,self.yaw_track[0]-np.pi/2,0,0,0,0,0,0])
-        #yaw_mode=airsimvae.YawMode(is_rate=False,yaw_or_rate=self.yaw_track[0]-np.pi/2)
-        #self.client.moveToPositionAsync(self.drone_init.position.x_val,self.drone_init.position.y_val,self.drone_init.position.z_val, 5,yaw_mode=yaw_mode).join()
-        self.client.simSetVehiclePose(QuadPose(self.state[[0,1,2,3,4,5]]), True)
-        #exit()
+
+
 
     def fly_through_gates(self):
         
-        #self.client.simSetVehiclePose(QuadPose(self.state[[0,1,2,3,4,5]]), True)
+        self.client.simSetVehiclePose(QuadPose(self.state[[0,1,2,3,4,5]]), True)
 
         index = 0
         while(True):
@@ -124,28 +116,21 @@ class PoseSampler:
                 N=int(T/self.dtau)
                 t=np.linspace(0,T,N)
                 self.traj.find_traj(x_initial=x_initial,x_final=x_final,v_initial=vel_initial,v_final=vel_final,T=T)
+                
                 t_current=0.0
                 for k in range(len(t)):
                     t_current=t[k] 
-                
                     target=self.traj.get_target(t_current)
                     vel_target=self.traj.get_vel(t_current)
                     quad_pose = [target[0], target[1], target[2], 0, 0, target[3]]
                     vel_target=[vel_target[0], vel_target[1], vel_target[2], 0, 0, vel_target[3]]
                     self.total_cost+=abs(np.sqrt(pow(quad_pose[0],2)+pow(quad_pose[1],2))-10)
                     self.state=np.array([target[0],target[1],target[2],0,0,target[3],vel_target[0],vel_target[1],vel_target[2],0,0,vel_target[3]])
-                    self.client.moveByVelocityZAsync(vx = vel_target[0] ,
-                             vy = vel_target[1] , #do this to try and smooth the movement
-                             z = target[2],
-                             duration = self.dtau,
-                             drivetrain = 0,
-                             yaw_mode = airsimvae.YawMode(is_rate= False, yaw_or_rate = target[3])).join()
-                    #self.client.simSetVehiclePose(QuadPose(quad_pose), True)
-                    #time.sleep(.01)
+                    self.client.simSetVehiclePose(QuadPose(quad_pose), True)
+                    time.sleep(.01)
+
 
                 index += 1
-
-
 
 
     def update(self, mode):
@@ -175,6 +160,7 @@ class PoseSampler:
                 self.client.simSetObjectPose(self.tgt_name, gate, True)
         # request quad img from AirSim
         time.sleep(0.001)
+
         if mode == "FLY":
             self.fly_through_gates()
         print("trajectory_cost:{}".format(self.total_cost))
@@ -189,8 +175,5 @@ class PoseSampler:
             self.tgt_name = self.client.simSpawnObject("gate", "RedGate16x16", Pose(position_val=Vector3r(0,0,15)), 0.75)
         else:
             self.tgt_name = "empty_target"
-
-
-
 
 
