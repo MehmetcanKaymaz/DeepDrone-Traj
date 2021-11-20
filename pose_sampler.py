@@ -50,7 +50,7 @@ class PoseSampler:
         self.Dronet =  Dronet.ResNet(Dronet.BasicBlock, [1,1,1,1], num_classes = 4)
         self.Dronet.to(self.device)
         #print("Dronet Model:", self.Dronet)
-        self.Dronet.load_state_dict(torch.load(self.base_path+'/weights/Dronet_new.pth',map_location=torch.device('cpu')))   
+        self.Dronet.load_state_dict(torch.load(self.base_path+'/weights/16_0.001_2_loss_0.0101_PG.pth',map_location=torch.device('cpu')))   
         self.Dronet.eval()
 
         # LstmR
@@ -328,7 +328,7 @@ class PoseSampler:
 
         index = 1
         while(True):
-            if index==4:
+            if index==80:
                 break
             image_response = self.client.simGetImages([airsim.ImageRequest('0', airsim.ImageType.Scene, False, False)])[0]
             #if len(image_response.image_data_uint8) == image_response.width * image_response.height * 3:
@@ -358,7 +358,7 @@ class PoseSampler:
                 
 
                 # Trajectory generate
-                index2=int(index/3)
+                index2=int((index%12)/3)
                 waypoint_world_real = np.array([self.track[index2].position.x_val, self.track[index2].position.y_val, self.track[index2].position.z_val])
                 
                 pos0 = [self.state[0], self.state[1], self.state[2]]

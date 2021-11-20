@@ -59,7 +59,7 @@ class Traj_Planner:
         x=c[0]+c[1]*t+c[2]*pow(t,2)+c[3]*pow(t,3)
         return x
     def __calculate_vel(self,c,t):
-        x=c[1]+c[2]*t+c[3]*2*pow(t,2)
+        x=c[1]+c[2]*2*t+c[3]*3*pow(t,2)
         return x
 
     def get_target(self,t):

@@ -14,9 +14,13 @@ import time
 from quadrotor import *
 from geom_utils import QuadPose, dist3dp
 from traj_planner import Traj_Planner
-from traj_planner_min_jerk import Traj
 # changed 
 from pose_sampler import * 
+from controller import Controller
+from quad_model import Model
+from mpc_class import MPC_controller
+
+
 
 
 
@@ -38,7 +42,10 @@ class PoseSampler:
         self.v_avg=v_avg
         self.traj=Traj_Planner()
         self.state=np.zeros(12)
-        self.traj2=Traj()
+
+        self.quad=Model()
+        self.controller=Controller()
+        self.mpc_controller=MPC_controller()
 
         quat0 = R.from_euler('ZYX',[90.,0.,0.],degrees=True).as_quat()
         quat1 = R.from_euler('ZYX',[60.,0.,0.],degrees=True).as_quat()
@@ -73,11 +80,16 @@ class PoseSampler:
         self.drone_init = self.drone_init # for circle trajectory change this with drone_init_circle
         self.state=np.array([self.drone_init.position.x_val,self.drone_init.position.y_val,self.drone_init.position.z_val,0,0,self.yaw_track[0]-np.pi/2,0,0,0,0,0,0])
 
+    def conf_u(self,u):
+        for i in range(3):
+            u[i]=(u[i]-5)/10
 
+        return u
 
     def fly_through_gates(self):
         
         self.client.simSetVehiclePose(QuadPose(self.state[[0,1,2,3,4,5]]), True)
+        self.quad.reset(x=self.state)
 
         index = 0
         while(True):
@@ -122,10 +134,18 @@ class PoseSampler:
                     t_current=t[k] 
                     target=self.traj.get_target(t_current)
                     vel_target=self.traj.get_vel(t_current)
-                    quad_pose = [target[0], target[1], target[2], 0, 0, target[3]]
-                    vel_target=[vel_target[0], vel_target[1], vel_target[2], 0, 0, vel_target[3]]
-                    self.total_cost+=abs(np.sqrt(pow(quad_pose[0],2)+pow(quad_pose[1],2))-10)
-                    self.state=np.array([target[0],target[1],target[2],0,0,target[3],vel_target[0],vel_target[1],vel_target[2],0,0,vel_target[3]])
+
+                    x_t=[vel_target[0]*np.cos(target[3])+vel_target[1]*np.sin(target[3]),vel_target[1]*np.cos(target[3])-vel_target[0]*np.sin(target[3]),vel_target[2],target[3]]
+                    
+                    u_nn=self.controller.run_controller(x=self.state[3:12],x_t=x_t)
+                    self.state=self.quad.run_model(self.conf_u(u_nn))
+
+
+
+                    quad_pose = [self.state[0], self.state[1], self.state[2], self.state[6], self.state[7], self.state[8]]
+                    #vel_target=[vel_target[0], vel_target[1], vel_target[2], 0, 0, vel_target[3]]
+                    #self.total_cost+=abs(np.sqrt(pow(quad_pose[0],2)+pow(quad_pose[1],2))-10)
+                    #self.state=np.array([target[0],target[1],target[2],0,0,target[3],vel_target[0],vel_target[1],vel_target[2],0,0,vel_target[3]])
                     self.client.simSetVehiclePose(QuadPose(quad_pose), True)
                     time.sleep(.01)
 
