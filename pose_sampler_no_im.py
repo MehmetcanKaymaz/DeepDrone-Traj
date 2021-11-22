@@ -106,15 +106,19 @@ class PoseSampler:
                 yawf=self.yaw_track[index%12]-np.pi/2-(int(index/12))*2*np.pi
 
                 pos0 = [self.state[0], self.state[1], self.state[2]]
-                vel0 = [self.state[6], self.state[7], self.state[8]]
+                vel0 = [self.state[3], self.state[4], self.state[5]]
                 ang_vel0 = [self.state[9], self.state[10], self.state[11]]
-                yaw0 = self.state[5]
+                yaw0 = self.state[8]
 
-                velf=[self.v_avg*np.cos(yawf),self.v_avg*np.sin(yawf),0,0]
+                v_des=self.v_avg
+                if index<5:
+                    v_des=(index+1)*self.v_avg/5
+
+                velf=[v_des*np.cos(yawf),v_des*np.sin(yawf),0,0]
 
                 x_initial=[pos0[0],pos0[1],pos0[2],yaw0]
                 x_final=[posf[0],posf[1],posf[2],yawf]
-                vel_initial=[vel0[0],vel0[1],vel0[2],ang_vel0[2]]
+                vel_initial=[vel0[0]*np.cos(yaw0)-vel0[1]*np.sin(yaw0),vel0[1]*np.cos(yaw0)+vel0[0]*np.sin(yaw0),vel0[2],ang_vel0[2]]
                 vel_final=velf
                 a_initial=[0,0,0,0]
                 a_final=[0,0,0,0]
@@ -124,7 +128,7 @@ class PoseSampler:
                     pose_err+=pow(x_final[j]-pos0[j],2)
 
                 pose_err=np.sqrt(pose_err)
-                T=pose_err/(self.v_avg)
+                T=pose_err/(v_des)
                 N=int(T/self.dtau)
                 t=np.linspace(0,T,N)
                 self.traj.find_traj(x_initial=x_initial,x_final=x_final,v_initial=vel_initial,v_final=vel_final,T=T)
@@ -140,9 +144,19 @@ class PoseSampler:
                     u_nn=self.controller.run_controller(x=self.state[3:12],x_t=x_t)
                     self.state=self.quad.run_model(self.conf_u(u_nn))
 
+                    if index<100:
+                        roll=self.state[6]
+                        pitch=self.state[7]
+                    else:
+                        roll=self.state[6]*np.pi/45
+                        pitch=self.state[7]*np.pi/45
+
+                    vel_total=np.sqrt(pow(self.state[3],2)+pow(self.state[4],2)+pow(self.state[5],2))
+                    print("Total_vel:{}".format(vel_total))
 
 
-                    quad_pose = [self.state[0], self.state[1], self.state[2], self.state[6], self.state[7], self.state[8]]
+
+                    quad_pose = [self.state[0], self.state[1], self.state[2], -roll, pitch, self.state[8]]
                     #vel_target=[vel_target[0], vel_target[1], vel_target[2], 0, 0, vel_target[3]]
                     #self.total_cost+=abs(np.sqrt(pow(quad_pose[0],2)+pow(quad_pose[1],2))-10)
                     #self.state=np.array([target[0],target[1],target[2],0,0,target[3],vel_target[0],vel_target[1],vel_target[2],0,0,vel_target[3]])

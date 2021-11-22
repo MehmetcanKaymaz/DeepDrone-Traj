@@ -14,6 +14,8 @@ import time
 from quadrotor import *
 from geom_utils import QuadPose
 from traj_planner import Traj_Planner
+from controller import Controller
+from quad_model import Model
 
 # Extras for Perception
 import torch
@@ -24,6 +26,9 @@ import cv2
 
 import Dronet
 import lstmf
+
+
+
 
 
 
@@ -63,6 +68,11 @@ class PoseSampler:
         #print("lstmR Model:", self.lstmR)
         self.lstmR.load_state_dict(torch.load(self.base_path+'/weights/R_2.pth',map_location=torch.device('cpu')))   
         self.lstmR.eval() 
+
+
+
+        self.quad=Model()
+        self.controller=Controller()
 
 
         self.brightness = 0.
@@ -114,7 +124,7 @@ class PoseSampler:
 
         self.track = self.track # for circle trajectory change this with circle_track
         self.drone_init = self.drone_init # for circle trajectory change this with drone_init_circle
-        self.state=np.array([self.drone_init.position.x_val,self.drone_init.position.y_val,self.drone_init.position.z_val,0,0,self.yaw_track[0]-np.pi/2,0,0,0,0,0,0])
+        self.state=np.array([self.drone_init.position.x_val,self.drone_init.position.y_val,-self.drone_init.position.z_val,0,0,self.yaw_track[0]-np.pi/2,0,0,0,0,0,0])
         #-----------------------------------------------------------------------             
 
 
@@ -322,9 +332,16 @@ class PoseSampler:
 
         return check_arrival
 
+    def conf_u(self,u):
+        for i in range(3):
+            u[i]=(u[i]-5)/10
+
+        return u
+
     def fly_through_gates(self):
-        
-        self.client.simSetVehiclePose(QuadPose(self.state[[0,1,2,3,4,5]]), True)
+        quad_pose = [self.state[0], self.state[1], -self.state[2], 0, 0, self.state[8]]
+        self.client.simSetVehiclePose(QuadPose(quad_pose), True)
+        self.quad.reset(x=self.state)
 
         index = 1
         while(True):
@@ -347,7 +364,7 @@ class PoseSampler:
 
                 pose_gate_body = pose_gate_body.numpy().reshape(-1,1)
 
-                drone_pos=self.state[[0,1,2,3,4,5]]#(x,y,z,roo,pitch,yaw)
+                drone_pos=[self.state[0], self.state[1], -self.state[2], 0, 0, self.state[8]]#(x,y,z,roo,pitch,yaw)
                 waypoint_world = spherical_to_cartesian(drone_pos, pose_gate_body)
 
                 yaw_diff = pose_gate_body[3][0]
@@ -362,11 +379,11 @@ class PoseSampler:
                 waypoint_world_real = np.array([self.track[index2].position.x_val, self.track[index2].position.y_val, self.track[index2].position.z_val])
                 
                 pos0 = [self.state[0], self.state[1], self.state[2]]
-                vel0 = [self.state[6], self.state[7], self.state[8]]
+                vel0 = [self.state[3], self.state[4], self.state[5]]
                 ang_vel0 = [self.state[9], self.state[10], self.state[11]]
-                yaw0 = self.state[5]
+                yaw0 = self.state[8]
 
-                posf = [waypoint_world[0], waypoint_world[1], waypoint_world[2]]
+                posf = [waypoint_world[0], waypoint_world[1], -waypoint_world[2]]
 
                 yawf = drone_pos[5]+yaw_diff+np.pi/2#-1*20*np.pi/180
 
@@ -377,7 +394,7 @@ class PoseSampler:
 
                 x_initial=[pos0[0],pos0[1],pos0[2],yaw0]
                 x_final=[posf[0],posf[1],posf[2],yawf]
-                vel_initial=[vel0[0],vel0[1],vel0[2],ang_vel0[2]]
+                vel_initial=[vel0[0]*np.cos(yaw0)-vel0[1]*np.sin(yaw0),vel0[1]*np.cos(yaw0)+vel0[0]*np.sin(yaw0),vel0[2],ang_vel0[2]]
                 vel_final=velf
 
                 pose_err=0
@@ -388,7 +405,7 @@ class PoseSampler:
                 T=pose_err/(self.v_avg)
                 N=int(T/self.dtau)
                 t=np.linspace(0,T,N)
-                print(len(t))
+                #print(len(t))
                 self.traj.find_traj(x_initial=x_initial,x_final=x_final,v_initial=vel_initial,v_final=vel_final,T=T)
 
 
@@ -404,9 +421,22 @@ class PoseSampler:
                 
                     target=self.traj.get_target(t_current)
                     vel_target=self.traj.get_vel(t_current)
-                    quad_pose = [target[0], target[1], target[2], 0, 0, target[3]]
+
+                    x_t=[vel_target[0]*np.cos(target[3])+vel_target[1]*np.sin(target[3]),vel_target[1]*np.cos(target[3])-vel_target[0]*np.sin(target[3]),vel_target[2],target[3]]
+                    
+                    u_nn=self.controller.run_controller(x=self.state[3:12],x_t=x_t)
+                    self.state=self.quad.run_model(self.conf_u(u_nn))
+
+
+
+                    vel_total=np.sqrt(pow(self.state[3],2)+pow(self.state[4],2)+pow(self.state[5],2))
+                    #print("Total_vel:{}".format(vel_total))
+
+
+
+                    quad_pose = [self.state[0], self.state[1], -self.state[2], 0, 0, self.state[8]]
+
                     self.total_cost+=abs(np.sqrt(pow(quad_pose[0],2)+pow(quad_pose[1],2))-10)
-                    self.state=np.array([target[0],target[1],target[2],0,0,target[3],vel_target[0],vel_target[1],vel_target[2],0,0,vel_target[3]])
                     self.client.simSetVehiclePose(QuadPose(quad_pose), True)
                     time.sleep(.01)
 
