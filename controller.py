@@ -1,6 +1,6 @@
 import numpy as np
 import torch
-#NN controller
+
 
 class Controller:
     def __init__(self):

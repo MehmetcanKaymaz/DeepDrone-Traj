@@ -51,8 +51,25 @@ class Traj_Planner:
         self.cy=self.__calculate_c(self.ym)
         self.cz=self.__calculate_c(self.zm)
         #self.cpsi=self.__calculate_c(self.psim)
-        self.cpsi=np.array([x_initial[3],(x_final[3]-x_initial[3])/T])
-        #print("cx : {}".format(self.cx))
+        self.cpsi=np.array([x_initial[3],(x_final[3]-x_initial[3])/self.T])
+        #print("cx : {}".format(self.cx)) 
+        #return self.T
+
+        
+    def __pose_err(self,x,xt):
+        err=0
+        for i in range(3):
+            err+=pow(xt[i]-x[i],2)
+        return np.sqrt(err)
+
+    def __find_T(self,current_pose,final_pose,current_vel,final_vel):
+        pose_err=self.__pose_err(current_pose,final_pose)
+        vel_init=self.__pose_err(current_vel,[0,0,0])
+        vel_final=self.__pose_err(final_vel,[0,0,0])
+        mean_vel=(vel_final+vel_init)/2
+        T=pose_err/mean_vel
+        return T
+
         
 
     def __calculate_ref(self,c,t):
@@ -77,6 +94,8 @@ class Traj_Planner:
         #rd=self.__calculate_vel(self.cpsi,t)
         rd=self.cpsi[1]
         return np.array([vxd,vyd,vzd,rd])
+    
+
 
     def get_traj(self,t):
         pos=self.get_target(t)

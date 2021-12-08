@@ -67,7 +67,10 @@ class PoseSampler:
         self.lstmR.to(self.device)
         #print("lstmR Model:", self.lstmR)
         self.lstmR.load_state_dict(torch.load(self.base_path+'/weights/R_2.pth',map_location=torch.device('cpu')))   
-        self.lstmR.eval() 
+        self.lstmR.eval()
+
+        self.loop_ration=5 
+        self.vel_des=0
 
 
 
@@ -119,9 +122,7 @@ class PoseSampler:
                     Pose(Vector3r(-5.,8.66,-2) , Quaternionr(quat11[0],quat11[1],quat11[2],quat11[3]))]
             
         quat_drone = R.from_euler('ZYX',[0.,0.,0.],degrees=True).as_quat()
-        self.drone_init = Pose(Vector3r(-5.,10.,-2), Quaternionr(quat_drone[0],quat_drone[1],quat_drone[2],quat_drone[3]))
-        
-        """
+        self.drone_init = Pose(Vector3r(-5.,10.,-2), Quaternionr(quat_drone[0],quat_drone[1],quat_drone[2],quat_drone[3]))"""
         self.track = [Pose(Vector3r(0.,2*10.,-2.) , Quaternionr(quat0[0],quat0[1],quat0[2],quat0[3])),
                     Pose(Vector3r(2*5.,2*8.66,-2) , Quaternionr(quat1[0],quat1[1],quat1[2],quat1[3])),
                     Pose(Vector3r(2*8.66,2*5.,-2) , Quaternionr(quat2[0],quat2[1],quat2[2],quat2[3])),
@@ -136,7 +137,7 @@ class PoseSampler:
                     Pose(Vector3r(2*-5.,2*8.66,-2) , Quaternionr(quat11[0],quat11[1],quat11[2],quat11[3]))]
             
         quat_drone = R.from_euler('ZYX',[0.,0.,0.],degrees=True).as_quat()
-        self.drone_init = Pose(Vector3r(-5.,2*10.,-2), Quaternionr(quat_drone[0],quat_drone[1],quat_drone[2],quat_drone[3]))
+        self.drone_init = Pose(Vector3r(-5.,2*10.,-2), Quaternionr(quat_drone[0],quat_drone[1],quat_drone[2],quat_drone[3]))        
 
         self.track = self.track # for circle trajectory change this with circle_track
         self.drone_init = self.drone_init # for circle trajectory change this with drone_init_circle
@@ -343,7 +344,7 @@ class PoseSampler:
 
 
         if ( (abs(abs(xd)-abs(x)) <= eps) and (abs(abs(yd)-abs(y)) <= eps) and (abs(abs(zd)-abs(z)) <= eps)):
-            self.quad.calculate_cost(target=target, final_calculation=True)
+            #self.quad.calculate_cost(target=target, final_calculation=True)
             check_arrival = True
 
         return check_arrival
@@ -374,21 +375,11 @@ class PoseSampler:
         self.quad.reset(x=self.state)
         
 
-        index = 1
+        index = 0
         vel_des=0
         while(True):
-            if index==80:
-                break
             image_response = self.client.simGetImages([airsim.ImageRequest('0', airsim.ImageType.Scene, False, False)])[0]
-            #if len(image_response.image_data_uint8) == image_response.width * image_response.height * 3:
-            """img1d = np.fromstring(image_response.image_data_uint8, dtype=np.uint8)  # get numpy array
-            img_rgb = img1d.reshape(image_response.height, image_response.width, 3)  # reshape array to 4 channel image array H X W X 3
-            img_rgb = cv2.cvtColor(img_rgb, cv2.COLOR_BGR2RGB)
-            # anyGate = self.isThereAnyGate(img_rgb)
-            #cv2.imwrite(os.path.join(self.base_path, 'images', "frame" + str(self.curr_idx).zfill(len(str(self.num_samples))) + '.png'), img_rgb)
-            img =  Image.fromarray(img_rgb)
-            image = self.transformation(img)""" 
-
+            
             with torch.no_grad():
                 #pose_gate_body = self.Dronet(image)
                 pose_gate_body=self.run_dronet(image_response)
@@ -401,28 +392,27 @@ class PoseSampler:
                 waypoint_world = spherical_to_cartesian(drone_pos, pose_gate_body)
 
                 yaw_diff = pose_gate_body[3][0]
-                """print("Yaw diff:{}".format(yaw_diff))
-                print("Current yaw:{}".format(drone_pos[5]))
-                print("Yaw track:{}".format(self.yaw_track[0]))"""
-                
-                
 
-                # Trajectory generate
-                index2=int((index%12)/3)
-                waypoint_world_real = np.array([self.track[index2].position.x_val, self.track[index2].position.y_val, self.track[index2].position.z_val])
-                
                 pos0 = [self.state[0], self.state[1], self.state[2]]
                 vel0 = [self.state[3], self.state[4], self.state[5]]
                 ang_vel0 = [self.state[9], self.state[10], self.state[11]]
                 yaw0 = self.state[8]
 
                 posf = [waypoint_world[0], waypoint_world[1], -waypoint_world[2]]
+                
 
                 yawf = drone_pos[5]+yaw_diff+np.pi/2#-1*20*np.pi/180
 
+                current_vel=np.sqrt(pow(vel0[0],2)+pow(vel0[1],2)+pow(vel0[2],2))
+
+                #waypoint_world_real = np.array([self.track[index].position.x_val, self.track[index].position.y_val, self.track[index].position.z_val])
+                """posf = [waypoint_world_real[0], waypoint_world_real[1], -waypoint_world_real[2]]
+                yawf=self.yaw_track[index]-np.pi/2"""
                 #print("Dronet output-->pose:{}  yaw:{}".format(posf,yawf*180/np.pi))
-                #print("Graunt Truth output-->pose:{}  yaw:{}".format(waypoint_world_real,self.yaw_track[index2]*180/np.pi-90))
-                vel_des=min(vel_des+2,self.v_avg)
+                #print("Graunt Truth output-->pose:{}  yaw:{}".format(waypoint_world_real,self.yaw_track[index]*180/np.pi-90))
+                
+                vel_des=min(current_vel+2,self.v_avg)
+
                 velf=[vel_des*np.cos(yawf),vel_des*np.sin(yawf),0,0]
 
                 #print("Vel_des:{}".format(vel_des))
@@ -446,12 +436,7 @@ class PoseSampler:
 
 
                 t_current=0.0
-                if index%3==0:
-                    len_t=len(t)
-                else:
-                    len_t=len(t)/3
-                
-                for k in range(int(len_t)):
+                for k in range(10):
                     t_current=t[k] 
                 
                     target=self.traj.get_target(t_current)
@@ -475,7 +460,14 @@ class PoseSampler:
                     self.client.simSetVehiclePose(QuadPose(quad_pose), True)
                     time.sleep(.02)
 
-                index += 1
+                    check_arrival = self.check_completion(index, quad_pose)
+
+                    if check_arrival: # drone arrives to the gate
+                        gate_completed = True
+                        index += 1
+                        print("Drone has gone through the {0}. gate.".format(index))
+                        break        
+
 
 
 

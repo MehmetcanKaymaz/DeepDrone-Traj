@@ -1,4 +1,4 @@
-from pose_sampler import *
+from pose_sampler_no_im import *
 import time
 import argparse
 parser = argparse.ArgumentParser(description='CHP')

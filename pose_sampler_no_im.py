@@ -60,21 +60,21 @@ class PoseSampler:
         quat10 = R.from_euler('ZYX',[-210.,0.,0.],degrees=True).as_quat()
         quat11 = R.from_euler('ZYX',[-250.,0.,0.],degrees=True).as_quat()
         self.yaw_track=np.array([90,60,30,0,-30,-60,-90,-120,-150,-180,-210,-250])*np.pi/180
-        self.track = [Pose(Vector3r(0.,10.,-2.) , Quaternionr(quat0[0],quat0[1],quat0[2],quat0[3])),
-                    Pose(Vector3r(5.,8.66,-2) , Quaternionr(quat1[0],quat1[1],quat1[2],quat1[3])),
-                    Pose(Vector3r(8.66,5.,-2) , Quaternionr(quat2[0],quat2[1],quat2[2],quat2[3])),
-                    Pose(Vector3r(10.,0.,-2) , Quaternionr(quat3[0],quat3[1],quat3[2],quat3[3])),
-                    Pose(Vector3r(8.66,-5.,-2) , Quaternionr(quat4[0],quat4[1],quat4[2],quat4[3])),
-                    Pose(Vector3r(5.,-8.66,-2) , Quaternionr(quat5[0],quat5[1],quat5[2],quat5[3])), 
-                    Pose(Vector3r(0.,-10.,-2) , Quaternionr(quat6[0],quat6[1],quat6[2],quat6[3])),
-                    Pose(Vector3r(-5.,-8.66,-2) , Quaternionr(quat7[0],quat7[1],quat7[2],quat7[3])),
-                    Pose(Vector3r(-8.66,-5,-2) , Quaternionr(quat8[0],quat8[1],quat8[2],quat8[3])),
-                    Pose(Vector3r(-10.,0,-2) , Quaternionr(quat9[0],quat9[1],quat9[2],quat9[3])),
-                    Pose(Vector3r(-8.66,5.,-2) , Quaternionr(quat10[0],quat10[1],quat10[2],quat10[3])),
-                    Pose(Vector3r(-5.,8.66,-2) , Quaternionr(quat11[0],quat11[1],quat11[2],quat11[3]))]
+        self.track = [Pose(Vector3r(0.,2*10.,-2.) , Quaternionr(quat0[0],quat0[1],quat0[2],quat0[3])),
+                    Pose(Vector3r(2*5.,2*8.66,-2) , Quaternionr(quat1[0],quat1[1],quat1[2],quat1[3])),
+                    Pose(Vector3r(2*8.66,2*5.,-2) , Quaternionr(quat2[0],quat2[1],quat2[2],quat2[3])),
+                    Pose(Vector3r(2*10.,0.,-2) , Quaternionr(quat3[0],quat3[1],quat3[2],quat3[3])),
+                    Pose(Vector3r(2*8.66,2*-5.,-2) , Quaternionr(quat4[0],quat4[1],quat4[2],quat4[3])),
+                    Pose(Vector3r(2*5.,2*-8.66,-2) , Quaternionr(quat5[0],quat5[1],quat5[2],quat5[3])), 
+                    Pose(Vector3r(0.,2*-10.,-2) , Quaternionr(quat6[0],quat6[1],quat6[2],quat6[3])),
+                    Pose(Vector3r(2*-5.,2*-8.66,-2) , Quaternionr(quat7[0],quat7[1],quat7[2],quat7[3])),
+                    Pose(Vector3r(2*-8.66,2*-5,-2) , Quaternionr(quat8[0],quat8[1],quat8[2],quat8[3])),
+                    Pose(Vector3r(2*-10.,0,-2) , Quaternionr(quat9[0],quat9[1],quat9[2],quat9[3])),
+                    Pose(Vector3r(2*-8.66,2*5.,-2) , Quaternionr(quat10[0],quat10[1],quat10[2],quat10[3])),
+                    Pose(Vector3r(2*-5.,2*8.66,-2) , Quaternionr(quat11[0],quat11[1],quat11[2],quat11[3]))]
             
         quat_drone = R.from_euler('ZYX',[0.,0.,0.],degrees=True).as_quat()
-        self.drone_init = Pose(Vector3r(-5.,10.,-2), Quaternionr(quat_drone[0],quat_drone[1],quat_drone[2],quat_drone[3]))
+        self.drone_init = Pose(Vector3r(-5.,2*10.,-2), Quaternionr(quat_drone[0],quat_drone[1],quat_drone[2],quat_drone[3]))
 
         self.track = self.track # for circle trajectory change this with circle_track
         self.drone_init = self.drone_init # for circle trajectory change this with drone_init_circle
@@ -92,6 +92,7 @@ class PoseSampler:
         self.quad.reset(x=self.state)
 
         index = 0
+        v_des=0
         while(True):
             if index==12*10:
                 break
@@ -110,9 +111,8 @@ class PoseSampler:
                 ang_vel0 = [self.state[9], self.state[10], self.state[11]]
                 yaw0 = self.state[8]
 
-                v_des=self.v_avg
-                if index<5:
-                    v_des=(index+1)*self.v_avg/5
+                v_des=min(v_des+2,self.v_avg)
+                
 
                 velf=[v_des*np.cos(yawf),v_des*np.sin(yawf),0,0]
 
@@ -156,7 +156,7 @@ class PoseSampler:
 
 
 
-                    quad_pose = [self.state[0], self.state[1], self.state[2], -roll, pitch, self.state[8]]
+                    quad_pose = [self.state[0], self.state[1], self.state[2], 0, 0, self.state[8]]
                     #vel_target=[vel_target[0], vel_target[1], vel_target[2], 0, 0, vel_target[3]]
                     #self.total_cost+=abs(np.sqrt(pow(quad_pose[0],2)+pow(quad_pose[1],2))-10)
                     #self.state=np.array([target[0],target[1],target[2],0,0,target[3],vel_target[0],vel_target[1],vel_target[2],0,0,vel_target[3]])
